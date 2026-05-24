@@ -268,8 +268,8 @@ document.addEventListener("DOMContentLoaded", () => {
         el.style.left = "0px";
         el.style.top  = "0px";
         
-        fallingWords.push({
-            el, isCorrect: spawnCorrect, x, y: -18,
+       fallingWords.push({
+            el, isCorrect: spawnCorrect, x, y: -80, // Змінено: слова спавняться значно вище
             speed: WORD_MIN_SPEED + Math.random() * (WORD_MAX_SPEED - WORD_MIN_SPEED)
         });
     }

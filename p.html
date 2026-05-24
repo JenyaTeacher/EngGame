@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Game UI Interface</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="p.css">
+</head>
+<body>
+
+    <div class="ui-wrapper">
+        <header class="section top">
+            <div class="health-row">
+                <span class="health-label">HEALTH</span>
+                <div class="bar-container">
+                    <div class="bar-fill" id="health-bar" style="width: 1%">
+                        <div class="dot"></div>
+                    </div>
+                </div>
+                <span class="health-pct" id="health-pct">1%</span>
+            </div>
+            <div class="theme-line" aria-hidden="true"></div>
+            <p class="theme-strip" id="theme-label">THEME: NIGHT WITHOUT A NAME</p>
+        </header>
+
+        <div class="words-lane" id="words-lane" aria-hidden="true"></div>
+
+        <main class="section center">
+            <img id="portrait-img" src="portrait.png" alt="Character portrait">
+        </main>
+
+        <footer class="section bottom">
+            <div class="player-wrap">
+                <div class="player-object" id="player-object" aria-label="Player object">
+                    <img src="jenyauchen.png" alt="Player object">
+                </div>
+            </div>
+            <div class="bottom-dock">
+                <div class="restart-row">
+                    <span class="stopwatch-display" id="stopwatch-display">00:00.0</span>
+                    <button type="button" class="restart-btn" id="restart-load-btn">RESTART</button>
+                </div>
+                <div class="direction-controls">
+                    <button type="button" class="restart-btn direction-btn direction-btn--left" id="move-left-btn" aria-label="Move left"><span class="direction-glyph" aria-hidden="true"></span></button>
+                    <button type="button" class="restart-btn direction-btn direction-btn--right" id="move-right-btn" aria-label="Move right"><span class="direction-glyph" aria-hidden="true"></span></button>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <div id="victory-overlay" class="victory-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="victory-title">
+        <div class="victory-panel">
+            <h2 id="victory-title" class="victory-title">VICTORY</h2>
+            <p class="victory-sub">Second boss defeated.</p>
+            <p class="victory-time"><span class="victory-time-label">TIME</span> <span id="victory-time-value" class="victory-time-value">00:00.0</span></p>
+            <button type="button" class="restart-btn victory-restart-btn" id="victory-restart-btn">PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <script src="p.js"></script>
+</body>
+</html>

@@ -356,7 +356,9 @@ body {
 }
 
 /* ── Victory overlay ────────────────────────────────────────────────── */
-
+.restart-btn, .direction-btn {
+    -webkit-tap-highlight-color: transparent;
+}
 .victory-overlay {
     position: fixed;
     inset: 0;

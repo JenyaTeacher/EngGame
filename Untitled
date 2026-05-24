@@ -1,0 +1,447 @@
+document.addEventListener("DOMContentLoaded", () => {
+    const healthTarget = 100;
+    const LOAD_TOTAL_MS = 60_000;
+    const PORTRAIT_ROUND_1_SRC = "portrait.png";
+    const PORTRAIT_ROUND_2_SRC = "portrait2.png";
+    /** Shown when #health-bar / health value is 0%. */
+    const PORTRAIT_HEALTH_ZERO_SRC = "portrait-health-zero.jpg";
+
+    const loadBar = document.getElementById("load-bar");
+    const loadTimerEl = document.getElementById("load-timer");
+    const restartBtn = document.getElementById("restart-load-btn");
+    const killtestBtn = document.getElementById("killtest-btn");
+    const moveLeftBtn = document.getElementById("move-left-btn");
+    const moveRightBtn = document.getElementById("move-right-btn");
+    const playerObject = document.getElementById("player-object");
+    const healthBar = document.getElementById("health-bar");
+    const healthPctEl = document.getElementById("health-pct");
+    const portraitImg = document.getElementById("portrait-img");
+    const themeLabel = document.getElementById("theme-label");
+    const wordsLane = document.getElementById("words-lane");
+    const gameOverOverlay = document.getElementById("game-over-overlay");
+
+    const themes = ["Vehicles", "Sports", "Electronics", "Foods", "Animals"];
+    let currentRound = 1;
+    let currentPortraitHealthySrc = PORTRAIT_ROUND_1_SRC;
+    let currentThemeIndex = Math.floor(Math.random() * themes.length);
+    let activeThemeWords = ["Word"];
+    let activeDistractorWords = ["Other"];
+    function applyThemeByIndex(index) {
+        const normalized = ((index % themes.length) + themes.length) % themes.length;
+        currentThemeIndex = normalized;
+        const theme = themes[currentThemeIndex];
+        activeThemeWords = wordsByTheme[theme] ?? ["Word"];
+        activeDistractorWords = distractorWordsByTheme[theme] ?? ["Other"];
+        if (themeLabel) {
+            themeLabel.textContent = `Theme: ${theme}`;
+        }
+    }
+    const wordsByTheme = {
+        Vehicles: ["Car", "Truck", "Bus", "Bike", "Train", "Boat", "Taxi", "Plane"],
+        Sports: ["Goal", "Ball", "Match", "Team", "Coach", "Sprint", "Score", "League"],
+        Electronics: ["Phone", "Laptop", "Screen", "Battery", "Sensor", "Chip", "Router", "Camera"],
+        Foods: ["Pizza", "Apple", "Bread", "Soup", "Salad", "Pasta", "Cheese", "Berry"],
+        Animals: ["Tiger", "Wolf", "Eagle", "Shark", "Horse", "Panda", "Fox", "Otter"]
+    };
+    const distractorWordsByTheme = {
+        Vehicles: ["Pizza", "Tiger", "Laptop", "Goal", "Bread"],
+        Sports: ["Truck", "Battery", "Soup", "Eagle", "Router"],
+        Electronics: ["Boat", "Pasta", "Horse", "Score", "Salad"],
+        Foods: ["Taxi", "Sensor", "Wolf", "League", "Train"],
+        Animals: ["Phone", "Cheese", "Match", "Bus", "Camera"]
+    };
+    applyThemeByIndex(currentThemeIndex);
+
+    const fallingWords = [];
+    const WORD_SPAWN_MS = 1100;
+    const WORD_MIN_SPEED = 70;
+    const WORD_MAX_SPEED = 125;
+    const WORD_HIT_DAMAGE = 7;
+    const WRONG_WORD_TIME_PENALTY_MS = 7000;
+    let wordSpawnIntervalId = null;
+    let wordsRafId = null;
+    let wordsPrevTs = null;
+
+    let currentHealthPct = 1;
+    let portraitLockedToZero = false;
+    let roundTransitioning = false;
+    let isGameOver = false;
+    /** Timestamp (ms) until which hits and penalties are ignored — grace period at round start. */
+    const GRACE_PERIOD_MS = 3500;
+    let invincibleUntil = 0;
+
+    function applyHealthDisplay(pct) {
+        currentHealthPct = Math.min(healthTarget, Math.max(0, Math.round(pct)));
+        healthBar.style.width = currentHealthPct + "%";
+        healthPctEl.textContent = currentHealthPct + "%";
+        if (portraitImg) {
+            if (currentHealthPct <= 0) portraitLockedToZero = true;
+            portraitImg.src = portraitLockedToZero
+                ? PORTRAIT_HEALTH_ZERO_SRC
+                : currentPortraitHealthySrc;
+        }
+    }
+
+    let healthAnimRafId = null;
+    let healthRecoveryTimeoutId = null;
+
+    function cancelHealthAnim() {
+        if (healthAnimRafId !== null) {
+            cancelAnimationFrame(healthAnimRafId);
+            healthAnimRafId = null;
+        }
+    }
+
+    function cancelHealthRecoveryDelay() {
+        if (healthRecoveryTimeoutId !== null) {
+            clearTimeout(healthRecoveryTimeoutId);
+            healthRecoveryTimeoutId = null;
+        }
+    }
+
+    function startNextRoundAfterBossDefeat() {
+        applyThemeByIndex(currentThemeIndex + 1);
+        currentRound += 1;
+        currentPortraitHealthySrc =
+            currentRound >= 2 ? PORTRAIT_ROUND_2_SRC : PORTRAIT_ROUND_1_SRC;
+        clearWords();
+        portraitLockedToZero = false;
+        invincibleUntil = performance.now() + GRACE_PERIOD_MS;
+        runHealthRamp(0, healthTarget, healthRecoveryDurationMs, () => {
+            roundTransitioning = false;
+        });
+    }
+
+    function runHealthRamp(fromPct, toPct, durationMs, onComplete) {
+        cancelHealthAnim();
+        const span = toPct - fromPct;
+        if (durationMs <= 0 || span === 0) {
+            applyHealthDisplay(toPct);
+            if (onComplete) onComplete();
+            return;
+        }
+        const t0 = performance.now();
+
+        function tick(now) {
+            const elapsed = now - t0;
+            const t = Math.min(1, elapsed / durationMs);
+            const eased = 1 - (1 - t) * (1 - t);
+            const value = Math.min(
+                healthTarget,
+                Math.max(0, Math.round(fromPct + eased * span))
+            );
+            applyHealthDisplay(value);
+            if (t < 1) {
+                healthAnimRafId = requestAnimationFrame(tick);
+            } else {
+                healthAnimRafId = null;
+                if (onComplete) onComplete();
+            }
+        }
+
+        healthAnimRafId = requestAnimationFrame(tick);
+    }
+
+    function hideGameOver() {
+        if (gameOverOverlay) {
+            gameOverOverlay.hidden = true;
+        }
+    }
+
+    function showGameOver() {
+        if (gameOverOverlay) {
+            gameOverOverlay.hidden = false;
+        }
+    }
+
+    function spawnWordObject() {
+        if (!wordsLane || isGameOver) return;
+        const laneWidth = wordsLane.clientWidth;
+        if (laneWidth <= 0) return;
+
+        const spawnCorrectWord = Math.random() < 0.7;
+        const source = spawnCorrectWord ? activeThemeWords : activeDistractorWords;
+        const word = source[Math.floor(Math.random() * source.length)];
+        const el = document.createElement("span");
+        el.className = "word-object";
+        el.textContent = word;
+        wordsLane.appendChild(el);
+
+        const elWidth = el.offsetWidth || 40;
+        const minX = 0;
+        const maxX = Math.max(minX, laneWidth - elWidth);
+        const x = minX + Math.random() * maxX;
+        el.style.left = "0px";
+        el.style.top = "0px";
+
+        fallingWords.push({
+            el,
+            isCorrect: spawnCorrectWord,
+            x,
+            y: -18,
+            speed: WORD_MIN_SPEED + Math.random() * (WORD_MAX_SPEED - WORD_MIN_SPEED)
+        });
+    }
+
+    function intersectsRect(a, b) {
+        return (
+            a.left < b.right &&
+            a.right > b.left &&
+            a.top < b.bottom &&
+            a.bottom > b.top
+        );
+    }
+
+    function applyWordHitDamage() {
+        if (roundTransitioning || isGameOver) return;
+        if (performance.now() < invincibleUntil) return;
+        const next = Math.max(0, currentHealthPct - WORD_HIT_DAMAGE);
+        if (next <= 0) {
+            roundTransitioning = true;
+        }
+        applyHealthDisplay(next);
+        if (next === 0) {
+            cancelHealthAnim();
+            cancelHealthRecoveryDelay();
+            healthRecoveryTimeoutId = setTimeout(() => {
+                healthRecoveryTimeoutId = null;
+                startNextRoundAfterBossDefeat();
+            }, healthZeroHoldMs);
+        }
+    }
+
+    function tickWords(ts) {
+        if (!wordsLane || isGameOver) return;
+        if (wordsPrevTs === null) wordsPrevTs = ts;
+        const dt = Math.min(0.05, (ts - wordsPrevTs) / 1000);
+        wordsPrevTs = ts;
+        const laneHeight = wordsLane.clientHeight;
+        const playerRect = playerObject?.getBoundingClientRect();
+
+        for (let i = fallingWords.length - 1; i >= 0; i -= 1) {
+            const item = fallingWords[i];
+            item.y += item.speed * dt;
+            item.el.style.transform = `translate(${item.x}px, ${item.y}px)`;
+
+            const wordRect = item.el.getBoundingClientRect();
+            const hitPlayer =
+                playerRect && intersectsRect(wordRect, playerRect);
+
+            if (hitPlayer) {
+                item.el.remove();
+                fallingWords.splice(i, 1);
+                if (item.isCorrect) {
+                    applyWordHitDamage();
+                } else {
+                    applyTimePenalty(WRONG_WORD_TIME_PENALTY_MS);
+                }
+                continue;
+            }
+
+            if (item.y > laneHeight + 24) {
+                item.el.remove();
+                fallingWords.splice(i, 1);
+            }
+        }
+
+        wordsRafId = requestAnimationFrame(tickWords);
+    }
+
+    function startWordGeneration() {
+        if (!wordsLane || isGameOver) return;
+        if (wordSpawnIntervalId !== null) clearInterval(wordSpawnIntervalId);
+        wordSpawnIntervalId = setInterval(spawnWordObject, WORD_SPAWN_MS);
+        if (wordsRafId === null) {
+            wordsPrevTs = null;
+            wordsRafId = requestAnimationFrame(tickWords);
+        }
+        for (let i = 0; i < 4; i += 1) {
+            setTimeout(spawnWordObject, i * 220);
+        }
+    }
+
+    function stopWordGeneration() {
+        if (wordSpawnIntervalId !== null) {
+            clearInterval(wordSpawnIntervalId);
+            wordSpawnIntervalId = null;
+        }
+        if (wordsRafId !== null) {
+            cancelAnimationFrame(wordsRafId);
+            wordsRafId = null;
+        }
+    }
+
+    function clearWords() {
+        while (fallingWords.length > 0) {
+            const item = fallingWords.pop();
+            item.el.remove();
+        }
+    }
+
+    let loadRafId = null;
+    let loadStart = null;
+    let loadPenaltyMs = 0;
+
+    function applyTimePenalty(ms) {
+        if (isGameOver) return;
+        if (performance.now() < invincibleUntil) return;
+        loadPenaltyMs = Math.min(LOAD_TOTAL_MS, loadPenaltyMs + ms);
+    }
+
+    function endGameAsLost() {
+        if (isGameOver) return;
+        isGameOver = true;
+        roundTransitioning = false;
+        cancelHealthAnim();
+        cancelHealthRecoveryDelay();
+        if (loadRafId !== null) {
+            cancelAnimationFrame(loadRafId);
+            loadRafId = null;
+        }
+        if (moveRafId !== null) {
+            cancelAnimationFrame(moveRafId);
+            moveRafId = null;
+        }
+        moveDirection = 0;
+        stopWordGeneration();
+        clearWords();
+        showGameOver();
+    }
+
+    function formatCountdownMs(remainingMs) {
+        const sec = Math.max(0, Math.ceil(remainingMs / 1000));
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+    }
+
+    function tickLoad(now) {
+        if (isGameOver) return;
+        if (loadStart === null) loadStart = now;
+        const elapsed = now - loadStart + loadPenaltyMs;
+        const remaining = Math.max(0, LOAD_TOTAL_MS - elapsed);
+        const pct = LOAD_TOTAL_MS > 0 ? (remaining / LOAD_TOTAL_MS) * 100 : 0;
+
+        loadBar.style.width = pct + "%";
+        loadTimerEl.textContent = formatCountdownMs(remaining);
+
+        if (remaining > 0) {
+            loadRafId = requestAnimationFrame(tickLoad);
+        } else {
+            loadRafId = null;
+            endGameAsLost();
+        }
+    }
+
+    function startLoadTimer() {
+        isGameOver = false;
+        hideGameOver();
+        if (loadRafId !== null) cancelAnimationFrame(loadRafId);
+        loadRafId = null;
+        loadStart = null;
+        loadPenaltyMs = 0;
+        loadBar.style.width = "100%";
+        loadTimerEl.textContent = formatCountdownMs(LOAD_TOTAL_MS);
+        loadRafId = requestAnimationFrame(tickLoad);
+        clearWords();
+        cancelHealthAnim();
+        cancelHealthRecoveryDelay();
+        roundTransitioning = false;
+        currentRound = 1;
+        currentPortraitHealthySrc = PORTRAIT_ROUND_1_SRC;
+        applyThemeByIndex(Math.floor(Math.random() * themes.length));
+        portraitLockedToZero = false;
+        applyHealthDisplay(healthTarget);
+        invincibleUntil = performance.now() + GRACE_PERIOD_MS;
+        startWordGeneration();
+    }
+
+    startLoadTimer();
+    restartBtn.addEventListener("click", startLoadTimer);
+
+    let moveDirection = 0;
+    let moveRafId = null;
+    let playerOffsetX = 0;
+    const moveSpeedPxPerSec = 190;
+    const moveLimitPx = 340;
+
+    function setPlayerOffset(x) {
+        playerOffsetX = Math.max(-moveLimitPx, Math.min(moveLimitPx, x));
+        if (playerObject) {
+            playerObject.style.transform = `translateX(${playerOffsetX}px)`;
+        }
+    }
+
+    function stopMoving() {
+        if (isGameOver) return;
+        moveDirection = 0;
+    }
+
+    function startMoving(direction) {
+        if (isGameOver) return;
+        moveDirection = direction;
+        if (moveRafId === null) {
+            let prev = performance.now();
+            const step = (now) => {
+                const dt = (now - prev) / 1000;
+                prev = now;
+                if (moveDirection !== 0) {
+                    setPlayerOffset(
+                        playerOffsetX + moveDirection * moveSpeedPxPerSec * dt
+                    );
+                }
+                if (moveDirection !== 0) {
+                    moveRafId = requestAnimationFrame(step);
+                } else {
+                    moveRafId = null;
+                }
+            };
+            moveRafId = requestAnimationFrame(step);
+        }
+    }
+
+    function bindHoldToMove(button, direction) {
+        if (!button) return;
+        button.addEventListener("pointerdown", (e) => {
+            e.preventDefault();
+            button.setPointerCapture?.(e.pointerId);
+            startMoving(direction);
+        });
+        button.addEventListener("pointerup", stopMoving);
+        button.addEventListener("pointercancel", stopMoving);
+        button.addEventListener("pointerleave", stopMoving);
+        button.addEventListener("lostpointercapture", stopMoving);
+    }
+
+    bindHoldToMove(moveLeftBtn, -1);
+    bindHoldToMove(moveRightBtn, 1);
+
+    const healthStart = 1;
+    const healthDelayMs = 400;
+    const healthDurationMs = 2000;
+    const healthRecoveryDurationMs = Math.round(healthDurationMs * 1.45);
+    /** Let 0% (and portrait-health-zero) paint before refilling; otherwise the next rAF tick jumps to ~1% in ~16ms. */
+    const healthZeroHoldMs = 400;
+
+    killtestBtn.addEventListener("click", () => {
+        if (roundTransitioning || isGameOver) return;
+        const damage = Math.round(healthTarget * 0.25);
+        const next = Math.max(0, Math.round(currentHealthPct - damage));
+        cancelHealthAnim();
+        cancelHealthRecoveryDelay();
+        if (next <= 0) {
+            roundTransitioning = true;
+        }
+        applyHealthDisplay(next);
+        if (next === 0) {
+            healthRecoveryTimeoutId = setTimeout(() => {
+                healthRecoveryTimeoutId = null;
+                startNextRoundAfterBossDefeat();
+            }, healthZeroHoldMs);
+        }
+    });
+
+    setTimeout(() => {
+        runHealthRamp(healthStart, healthTarget, healthDurationMs);
+    }, healthDelayMs);
+});

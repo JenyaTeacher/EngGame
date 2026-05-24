@@ -42,6 +42,9 @@ body {
         linear-gradient(90deg, rgba(0, 243, 255, 0.05) 1px, transparent 1px);
     background-size: 40px 40px;
     background-position: center center;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
 }
 
 .ui-wrapper {

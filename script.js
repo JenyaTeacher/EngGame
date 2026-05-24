@@ -3,7 +3,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const healthTarget = 100;
     const PORTRAIT_ROUND_1_SRC = "boss1.png";
     const PORTRAIT_ROUND_2_SRC = "boss2.png";
-    const PORTRAIT_HEALTH_ZERO_SRC = "portrait-health-zero.jpg";
+    const PORTRAIT_HEALTH_ZERO_SRC = "boss1.png";
 
     const healthStart = 1;
     const healthDelayMs = 400;
